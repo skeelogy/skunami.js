@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>skunami.js - Height Field Water</title>
+    <meta charset="UTF-8"/>
+
+    <link rel="stylesheet" href="css/style.css">
+
+    <!--load helper libraries-->
+    <script type="text/javascript" src="js/jquery/jquery-2.0.2.min.js"></script>
+    <script type="text/javascript" src="js/skparallelreduce/skparallelreduce.min.js"></script>
+
+    <!--load 3D libraries-->
+    <script type="text/javascript" src="js/threejs/three.min.js"></script>
+    <script type="text/javascript" src="js/threejs/Detector.js"></script>
+    <script type="text/javascript" src="js/threejs/stats.min.js"></script>
+    <script type="text/javascript" src="js/threejs/OrbitControls.js"></script>
+    <script type="text/javascript" src="js/dat.gui/dat.gui.min.js"></script>
+
+    <!--load water libraries-->
+    <script type="text/javascript" src="../skunami.min.js"></script>
+
+    <script>
+
+    var WATER_SIZE = 10;
+    var WATER_RES = 256;
+    var WATER_GRID_SIZE = WATER_SIZE / WATER_RES;
+    var MEAN_WATER_HEIGHT = 0.0;
+    var WATER_FLOOD_RATE = 0.0;
+    var WATER_SOURCE_AMOUNT = 0.2;
+    var WATER_SOURCE_RADIUS = 0.7;
+    var WATER_SINK_AMOUNT = 0.5;
+    var WATER_SINK_RADIUS = 0.7;
+
+    var SHADOW_MAP_RES = 1024;
+
+    var GLOBAL_POS = new THREE.Vector3(0.5, 1, 1);
+    var GLOBAL_ROT = new THREE.Vector3(THREE.Math.degToRad(10), -THREE.Math.degToRad(10), THREE.Math.degToRad(10));
+    var GLOBAL_SCALE = new THREE.Vector3(1.25, 1.25, 1.25);
+
+    var GLOBAL_MAT = new THREE.Matrix4();
+    // GLOBAL_MAT.multiply(new THREE.Matrix4().makeTranslation(GLOBAL_POS.x, GLOBAL_POS.y, GLOBAL_POS.z));
+    // GLOBAL_MAT.multiply(new THREE.Matrix4().makeRotationX(GLOBAL_ROT.x));
+    // GLOBAL_MAT.multiply(new THREE.Matrix4().makeRotationY(GLOBAL_ROT.y));
+    // GLOBAL_MAT.multiply(new THREE.Matrix4().makeRotationZ(GLOBAL_ROT.z));
+    // GLOBAL_MAT.multiply(new THREE.Matrix4().makeScale(GLOBAL_SCALE.x, GLOBAL_SCALE.y, GLOBAL_SCALE.z));
+
+    var waterSimTypes = {
+        'Pipe Model': 'gpuPipeModelWater',
+        'X Water': 'gpuXWater',
+        'Tessendorf iWave': 'gpuIWaveWater',
+        'Muller GDC2008': 'gpuMuellerGdc2008Water',
+        'Muller GDC2008 HelloWorld': 'gpuMuellerGdc2008HwWater'
+    };
+    var waterSimTypeSettings = {
+        'gpuPipeModelWater': { 'disturbAmount': 0.15, 'disturbRadius': 0.25 },
+        'gpuXWater': { 'disturbAmount': 0.035, 'disturbRadius': 0.25 },
+        'gpuIWaveWater': { 'disturbAmount': 0.004, 'disturbRadius': 0.25 },
+        'gpuMuellerGdc2008Water': { 'disturbAmount': 0.2, 'disturbRadius': 0.25 },
+        'gpuMuellerGdc2008HwWater': { 'disturbAmount': 0.2, 'disturbRadius': 0.25 }
+    };
+    var options = {
+        waterSimType: waterSimTypes[Object.keys(waterSimTypes)[0]],
+        waterSimFloodVolRate: WATER_FLOOD_RATE,
+        obstaclesActive: true,
+        obstaclesSeed: 1,
+        obstaclesShowObstacles: true,
+        obstaclesShowDepthMap: true,
+        renderingShadows: true,
+        displayWireframe: false,
+        displayLocalAxis: false,
+        displaySimTexture: false,
+        displayVelMag: false,
+        displayVelDir: false
+    };
+
+    var clock = new THREE.Clock();
+
+    // var waterDampingFactor = 0.0;
+    var waterDisturbAmount = 0.0;
+    var waterDisturbRadius = 0.0;
+
+    function checkWebGl() {
+        if (!Detector.webgl) {
+            $('div').remove();
+            Detector.addGetWebGLMessage();
+            throw new Error('Your browser does not seem to support WebGL');
+        }
+    }
+
+    var renderer, scene, camera, controls, globalTransform;
+    var keyLight, fillLight;
+    var groundPlaneGeom, groundPlaneMesh;
+    var materials = [];
+    var worldAxis, localAxis;
+    function setupThreejsScene() {
+
+        //create renderer
+        renderer = new THREE.WebGLRenderer({
+            antialias : true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight - 5);
+        renderer.setClearColor('#111111', 1);
+        renderer.shadowMapEnabled = true;
+        renderer.shadowMapType = THREE.PCFSoftShadowMap;
+        renderer.shadowMapSoft = true;
+        var $container = $('#threejs-container');
+        $container.append(renderer.domElement);
+
+        //create scene
+        scene = new THREE.Scene();
+
+        //create an overall transformation to hold the global transform
+        globalTransform = new THREE.Object3D();
+        globalTransform.matrixAutoUpdate = false;
+        globalTransform.matrix.multiply(GLOBAL_MAT);
+        globalTransform.matrixWorldNeedsUpdate = true;
+        scene.add(globalTransform);
+
+        //create camera
+        camera = new THREE.PerspectiveCamera(25, renderer.domElement.width / renderer.domElement.height, 0.1, 1000);
+        camera.position.set(8, 8, 15);
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+        //create controls for camera
+        controls = new THREE.OrbitControls(camera);
+        controls.userPanSpeed = 0.2;
+        //controls.autoRotate = true;
+        controls.modifierKey = 'alt';
+
+        //create axis
+        worldAxis = new THREE.AxisHelper();
+        scene.add(worldAxis);
+        localAxis = new THREE.AxisHelper();
+        globalTransform.add(localAxis);
+
+        //setup lights
+        globalTransform.add(new THREE.AmbientLight(0x111111));
+
+        keyLight = new THREE.DirectionalLight(0xFFBBBB, 0.75);
+        keyLight.position.set(5, 15, -15);
+        keyLight.target.position.set(0, 0, 0);
+        keyLight.castShadow = true;
+        keyLight.shadowCameraNear = 16;
+        keyLight.shadowCameraFar = 27;
+        keyLight.shadowCameraRight = 7;
+        keyLight.shadowCameraLeft = -7;
+        keyLight.shadowCameraTop = 7;
+        keyLight.shadowCameraBottom = -7;
+        // keyLight.shadowCameraVisible = true;
+        keyLight.shadowBias = 0.005;
+        keyLight.shadowDarkness = 0.5;
+        keyLight.shadowMapWidth = SHADOW_MAP_RES;
+        keyLight.shadowMapHeight = SHADOW_MAP_RES;
+        globalTransform.add(keyLight);
+
+        fillLight = new THREE.DirectionalLight(0x33DDFF, 0.4);
+        fillLight.position.set(5, 2, 15);
+        fillLight.target.position.set(0, 0, 0);
+        globalTransform.add(fillLight);
+
+        //create plane for intersection test
+        groundPlaneGeom = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 1, 1);
+        groundPlaneGeom.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+        groundPlaneGeom.applyMatrix(new THREE.Matrix4().makeTranslation(0, MEAN_WATER_HEIGHT, 0));  //move groundPlaneGeom up by MEAN_WATER_HEIGHT to detect correct intersection later
+        var groundPlaneMaterial = new THREE.MeshPhongMaterial();
+        materials.push(groundPlaneMaterial);
+        groundPlaneMesh = new THREE.Mesh(groundPlaneGeom, groundPlaneMaterial);
+        groundPlaneMesh.castShadow = false;
+        groundPlaneMesh.receiveShadow = false;
+        groundPlaneMesh.visible = false;
+        globalTransform.add(groundPlaneMesh);
+    }
+
+    // var RANDOM_SEED = 1;
+    // Math.seedrandom(RANDOM_SEED);
+    var waterGeom, waterMesh;
+    var visGeom, visMaterial, visMesh;
+    var hfWater, gpuPipeModelWater, gpuIWaveWater, gpuMuellerGdc2008Water, gpuMuellerGdc2008HwWater, gpuXWater;
+    var iSegments = 3;
+    var jSegments = 3;
+    var iSegmentSize = WATER_SIZE / iSegments;
+    var jSegmentSize = WATER_SIZE / jSegments;
+    var halfWaterSize = WATER_SIZE / 2.0;
+    var obstacles = [];
+    function setupWaterScene() {
+
+        //create a height-field water sim from the plane
+        waterGeom = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_RES - 1, WATER_RES - 1);
+        waterGeom.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+        // waterGeom.applyMatrix(new THREE.Matrix4().makeTranslation(0, MEAN_WATER_HEIGHT, 0));
+        // var waterMaterial = new THREE.MeshPhongMaterial({color: '#3366FF'});
+        // materials.push(waterMaterial);
+        waterMesh = new THREE.Mesh(waterGeom, null);
+        waterMesh.castShadow = true;
+        waterMesh.receiveShadow = true;
+        globalTransform.add(waterMesh);
+
+        //create the different water sims
+        gpuPipeModelWater = new SKUNAMI.GpuPipeModelWater({
+            renderer: renderer,
+            scene: scene,
+            mesh: waterMesh,
+            size: WATER_SIZE,
+            res: WATER_RES,
+            dampingFactor: 0.995,
+            multisteps: 1
+        });
+        gpuXWater = new SKUNAMI.GpuXWater({
+            renderer: renderer,
+            scene: scene,
+            mesh: waterMesh,
+            size: WATER_SIZE,
+            res: WATER_RES,
+            dampingFactor: 0.95,
+            multisteps: 2,
+            meanHeight: MEAN_WATER_HEIGHT
+        });
+        gpuIWaveWater = new SKUNAMI.GpuTessendorfIWaveWater({
+            renderer: renderer,
+            scene: scene,
+            mesh: waterMesh,
+            size: WATER_SIZE,
+            res: WATER_RES,
+            dampingFactor: 0.6,
+            multisteps: 8,
+            meanHeight: MEAN_WATER_HEIGHT
+        });
+        gpuMuellerGdc2008Water = new SKUNAMI.GpuMuellerGdc2008Water({
+            renderer: renderer,
+            scene: scene,
+            mesh: waterMesh,
+            size: WATER_SIZE,
+            res: WATER_RES,
+            dampingFactor: 0.95,
+            horizontalSpeed: 4.0,
+            multisteps: 1,
+            meanHeight: MEAN_WATER_HEIGHT
+        });
+        gpuMuellerGdc2008HwWater = new SKUNAMI.GpuMuellerGdc2008HwWater({
+            renderer: renderer,
+            scene: scene,
+            mesh: waterMesh,
+            size: WATER_SIZE,
+            res: WATER_RES,
+            dampingFactor: 0.95,
+            multisteps: 3,
+            meanHeight: MEAN_WATER_HEIGHT
+        });
+        hfWater = gpuMuellerGdc2008HwWater;
+
+        // //create some obstacles for the water sim
+        // var i, j;
+        // for (i = 0; i < iSegments; i++)
+        // {
+            // for (j = 0; j < jSegments; j++)
+            // {
+                // var length = WATER_SIZE / 5.0;
+                // var obstacleGeom = new THREE.CubeGeometry(length*(Math.random()*0.5+0.5), 1, length*(Math.random()*0.5+0.5));
+                // var obstacleMaterial = new THREE.MeshPhongMaterial();
+                // materials.push(obstacleMaterial);
+                // obstacleMesh = new THREE.Mesh(obstacleGeom, obstacleMaterial);
+                // obstacleMesh.castShadow = true;
+                // obstacleMesh.receiveShadow = true;
+                // obstacleMesh.position.x = (iSegmentSize * i) - halfWaterSize + ((Math.random()) * iSegmentSize);
+                // // obstacleMesh.position.y = Math.random() * 2 - 1.0;
+                // obstacleMesh.position.z = (jSegmentSize * j) - halfWaterSize + ((Math.random()) * jSegmentSize);
+                // obstacleMesh.rotation.y = (Math.random() * 360);
+                // // obstacleMesh.visible = false;
+                // globalTransform.add(obstacleMesh);
+
+                // //create Obstacle
+                // var obstacle = new VoxelizedObstacle(obstacleMesh, WATER_GRID_SIZE, WATER_GRID_SIZE, WATER_GRID_SIZE, globalTransform.matrixWorld);
+                // gpuIWaveWater.addObstacle(obstacle, 'obstacle'+obstacles.length);
+                // gpuMuellerGdc2008Water.addObstacle(obstacle, 'obstacle'+obstacles.length);
+                // gpuMuellerGdc2008HwWater.addObstacle(obstacle, 'obstacle'+obstacles.length);
+                // gpuXWater.addObstacle(obstacle, 'obstacle'+obstacles.length);
+                // gpuPipeModelWater.addObstacle(obstacle, 'obstacle'+obstacles.length);
+                // obstacle.updateAlways = false;
+                // // obstacle.update();  //NOTE: this does not work because we are updating the obstacle before the mesh has updated
+
+                // obstacles.push(obstacle);
+            // }
+        // }
+
+        // //temp, just to make the demo nicer
+        // obstacles[1].mesh.position.x += -1;
+        // obstacles[2].mesh.position.x = 10000;
+        // obstacles[2].mesh.position.x = 10000;
+
+        // //using a flag to let obstacles update once after mesh updates
+        // shouldUpdateObstacles = true;
+
+        //create a RTT visualization plane
+        visGeom = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 1, 1);
+        visGeom.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+        visMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, map: hfWater.getDisplayTexture() });
+        materials.push(visMaterial);
+        visMesh = new THREE.Mesh(visGeom, visMaterial);
+        visMesh.position.y = 3;
+        visMesh.castShadow = true;
+        visMesh.receiveShadow = true;
+        scene.add(visMesh);
+    }
+
+    // var shouldUpdateObstacles;
+    // function randomizeObstaclePositions()
+    // {
+        // var i, j;
+        // for (i = 0; i < iSegments; i++)
+        // {
+            // for (j = 0; j < jSegments; j++)
+            // {
+                // idx = i * iSegments + j;
+                // obstacles[idx].mesh.position.x = (iSegmentSize * i) - halfWaterSize + ((Math.random()) * iSegmentSize * 0.8);
+                // obstacles[idx].mesh.position.y = Math.random() * 4 - 2;
+                // obstacles[idx].mesh.position.z = (jSegmentSize * j) - halfWaterSize + ((Math.random()) * jSegmentSize * 0.8);
+                // obstacles[idx].mesh.rotation.y = (Math.random() * 360);
+
+                // // obstacles[idx].update();  //NOTE: this does not work because we are updating the obstacle before the mesh has updated
+
+                // //so set a flag here to let obstacles update once after mesh updates
+                // shouldUpdateObstacles = true;
+            // }
+        // }
+    // }
+
+    var intersectPoint = new THREE.Vector3();
+    var mousePosNorm = new THREE.Vector2();
+    var projector = new THREE.Projector();
+    var raycaster = new THREE.Raycaster();
+    function detectIntersection() {
+
+        mousePosNorm.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mousePosNorm.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        //cast a ray from camera into screen
+        var worldPos = new THREE.Vector3(mousePosNorm.x, mousePosNorm.y, 1);
+        projector.unprojectVector(worldPos, camera);
+        raycaster.set(camera.position, worldPos.sub(camera.position).normalize());
+        var intersectInfo = raycaster.intersectObject(groundPlaneMesh);
+
+        //get intersection point and vertexId
+        if (intersectInfo && intersectInfo[0]) {
+            return intersectInfo[0].point;
+        }
+    }
+
+    function window_onResize(event) {
+        //update camera projection
+        camera.aspect = window.innerWidth / (window.innerHeight - 5);
+        camera.updateProjectionMatrix();
+
+        //update renderer size
+        renderer.setSize(window.innerWidth, window.innerHeight - 5);
+    }
+
+    var activateDisturb = false;
+    function window_onKeyDown(event) {
+        if (event.keyCode === 32) {  //space
+            activateDisturb = true;
+        }
+    }
+
+    function window_onKeyUp(event) {
+        if (event.keyCode === 32) {  //space
+            activateDisturb = false;
+        }
+    }
+
+    var isDisturbing = false;
+    function window_onMouseDown(event) {
+
+        if (activateDisturb) {
+
+            //detect intersection
+            intersectPoint = detectIntersection();
+            if (intersectPoint) {
+                isDisturbing = true;
+                if (event.button === 0) {  //LMB
+                    hfWater.disturb(intersectPoint, waterDisturbAmount, waterDisturbRadius);
+                } else if (event.button === 1) {  //MMB
+                    if (hfWater instanceof SKUNAMI.GpuPipeModelWater) {  //only pipe model water can source
+                        hfWater.source(intersectPoint, -WATER_SINK_AMOUNT, WATER_SINK_RADIUS);
+                    }
+                } else if (event.button === 2) {  //RMB
+                    if (hfWater instanceof SKUNAMI.GpuPipeModelWater) {  //only pipe model water can source
+                        hfWater.source(intersectPoint, WATER_SOURCE_AMOUNT, WATER_SOURCE_RADIUS);
+                    }
+                }
+            }
+        }
+    }
+
+    function window_onMouseMove(event) {
+
+        event.preventDefault();
+
+        if (activateDisturb && isDisturbing) {
+
+            //detect intersection
+            intersectPoint = detectIntersection();
+            if (intersectPoint) {
+                if (event.button === 0) {  //LMB
+                    hfWater.disturb(intersectPoint, waterDisturbAmount, waterDisturbRadius);
+                } else if (event.button === 1) {  //MMB
+                    if (hfWater instanceof SKUNAMI.GpuPipeModelWater) {  //only pipe model water can source
+                        hfWater.source(intersectPoint, -WATER_SINK_AMOUNT, WATER_SINK_RADIUS);
+                    }
+                } else if (event.button === 2) {  //LMB
+                    if (hfWater instanceof SKUNAMI.GpuPipeModelWater) {  //only pipe model water can source
+                        hfWater.source(intersectPoint, WATER_SOURCE_AMOUNT, WATER_SOURCE_RADIUS);
+                    }
+                }
+            }
+        }
+    }
+
+    function window_onMouseUp(event) {
+        isDisturbing = false;
+    }
+
+    function setupEvents() {
+        window.addEventListener('resize', window_onResize, false);
+        window.addEventListener('keydown', window_onKeyDown, false);
+        window.addEventListener('keyup', window_onKeyUp, false);
+        window.addEventListener('mousedown', window_onMouseDown, false);
+        window.addEventListener('mousemove', window_onMouseMove, false);
+        window.addEventListener('mouseup', window_onMouseUp, false);
+    }
+
+    var stats;
+    function setupStats() {
+        stats = new Stats();
+        $('body').append(stats.domElement);
+    }
+
+    var gui;
+    var waterSimFolder, obstaclesFolder, renderingFolder, displayFolder;
+    function setupGui() {
+
+        gui = new dat.GUI({width: 350});
+        // gui.close();  //close GUI by default
+
+        //Water Sim folder
+        waterSimFolder = gui.addFolder('Water Sim');
+        waterSimFolder.open();
+
+        var control = waterSimFolder.add(options, 'waterSimType', waterSimTypes).name('Type');
+        function changeWaterSimType(value) {
+
+            var prevHfWater = hfWater;
+
+            //swap the sim
+            hfWater = eval(value);
+
+            //reset sim and restore some prev sim values
+            hfWater.reset();
+            hfWater.setShouldDisplaySimTexture(prevHfWater.getShouldDisplaySimTexture());
+            var prevMeanHeight = 0;
+            if (prevHfWater instanceof SKUNAMI.GpuHeightFieldSurfaceWater) {
+                prevMeanHeight = prevHfWater.getMeanHeight();
+            }
+            if (hfWater instanceof SKUNAMI.GpuHeightFieldSurfaceWater) {
+                hfWater.setMeanHeight(prevMeanHeight);
+            }
+
+            //load some presets so that that sim works well
+            waterDisturbAmount = waterSimTypeSettings[value].disturbAmount;
+            waterDisturbRadius = waterSimTypeSettings[value].disturbRadius;
+
+            //make sure to inherit the active value from the GUI too
+            // hfWater.setObstaclesActive(options.obstaclesActive);
+        }
+        control.onChange(changeWaterSimType);
+        changeWaterSimType(options.waterSimType);
+
+        control = waterSimFolder.add(options, 'waterSimFloodVolRate', -20, 20).step(0.1).name('Flood Vol Rate');
+
+        // //Obstacles folder
+        // obstaclesFolder = gui.addFolder('Obstacles');
+        // // obstaclesFolder.open();
+
+        // control = obstaclesFolder.add(options, 'obstaclesActive').name('Active');
+        // function changeObstaclesActive(value)
+        // {
+            // // hfWater.setObstaclesActive(value);
+        // }
+        // control.onChange(changeObstaclesActive);
+        // changeObstaclesActive(options.obstaclesActive);
+
+        // control = obstaclesFolder.add(options, 'obstaclesSeed', 0, 50).step(1).name('Seed');
+        // function changeObstaclesSeed(value)
+        // {
+            // RANDOM_SEED = Math.floor(value);
+            // Math.seedrandom(RANDOM_SEED);
+            // randomizeObstaclePositions();
+        // }
+        // control.onChange(changeObstaclesSeed);
+
+        // control = obstaclesFolder.add(options, 'obstaclesShowObstacles').name('Show Obstacles');
+        // function changeObstaclesShowObstacles(value)
+        // {
+            // for (obstacleId in obstacles)
+            // {
+                // obstacles[obstacleId].mesh.visible = value;
+            // }
+        // }
+        // control.onChange(changeObstaclesShowObstacles);
+        // changeObstaclesShowObstacles(options.obstaclesShowObstacles);
+
+        // control = obstaclesFolder.add(options, 'obstaclesShowDepthMap').name('Show Depth Map');
+        // function changeObstaclesShowDepthMap(value)
+        // {
+        //  if (value)
+        //  {
+        //      ObstacleManager.$depthMapImageObj.css({display:'block'});
+        //  }
+        //  else
+        //  {
+        //      ObstacleManager.$depthMapImageObj.css({display:'none'});
+        //  }
+        // }
+        // control.onChange(changeObstaclesShowDepthMap);
+        // changeObstaclesShowDepthMap(options.obstaclesShowDepthMap);
+
+        // //Rendering folder
+        // renderingFolder = gui.addFolder('Rendering');
+
+        // control = renderingFolder.add(options, 'renderingShadows').name('Shadows');
+        // function changeRenderingShadows(value)
+        // {
+            // renderer.shadowMapAutoUpdate = value;
+            // if (!value)
+            // {
+                // renderer.clearTarget(keyLight.shadowMap);
+            // }
+        // }
+        // control.onChange(changeRenderingShadows);
+        // changeRenderingShadows(options.renderingShadows);
+
+        //Display folder
+        displayFolder = gui.addFolder('Display');
+        displayFolder.open();
+
+        // control = displayFolder.add(options, 'displayWireframe').name('Wireframe');
+        // function toggleWireframe(value)
+        // {
+            // for (materialId in materials)
+            // {
+                // materials[materialId].wireframe = value;
+            // }
+        // }
+        // control.onChange(toggleWireframe);
+        // toggleWireframe(options.displayWireframe);
+
+        control = displayFolder.add(options, 'displayLocalAxis').name('Local Axis');
+        function toggleLocalAxis(value) {
+            worldAxis.visible = value;
+            localAxis.visible = value;
+        }
+        control.onChange(toggleLocalAxis);
+        toggleLocalAxis(options.displayLocalAxis);
+
+        control = displayFolder.add(options, 'displaySimTexture').name('Sim Texture');
+        function toggleSimTexture(value) {
+            hfWater.setShouldDisplaySimTexture(value);
+            visMesh.visible = value;
+        }
+        control.onChange(toggleSimTexture);
+        toggleSimTexture(options.displaySimTexture);
+
+        // control = displayFolder.add(options, 'displayVelMag').name('Velocity Mag');
+        // function toggleVelMag(value)
+        // {
+            // if (hfWater instanceof HeightFieldWaterWithVel)
+            // {
+                // hfWater.visualizeVelColors(value);
+            // }
+        // }
+        // control.onChange(toggleVelMag);
+        // toggleVelMag(options.displayVelMag);
+
+        // control = displayFolder.add(options, 'displayVelDir').name('Velocity Dir');
+        // function displayVelDir(value)
+        // {
+            // if (hfWater instanceof HeightFieldWaterWithVel)
+            // {
+                // hfWater.visualizeVelLines(value);
+            // }
+        // }
+        // control.onChange(displayVelDir);
+        // displayVelDir(options.displayVelDir);
+    }
+
+    var dV;
+    $(document).ready(function () {
+
+        //check for WebGL
+        checkWebGl();
+
+        console.log('Document is ready.');
+
+        //setup scene
+        setupThreejsScene();
+
+        //setup water
+        setupWaterScene();
+
+        //setup events
+        setupEvents();
+
+        //setup stats monitor
+        setupStats();
+
+        //setup GUI
+        setupGui();
+
+        //main loop
+        function loop() {
+
+            var dt = clock.getDelta();  //have to call this before getElapsedTime()
+            var time = clock.getElapsedTime();
+
+            controls.update();
+
+            // hfWater.shouldDisplay = true;
+            visMaterial.map = hfWater.getDisplayTexture();
+
+            renderer.autoClear = false;
+            renderer.clear();
+            hfWater.update(dt);  //have to do this after clear but before render
+            renderer.render(scene, camera);
+
+            stats.update();
+
+            // //update obstacles after rendering is done, so that meshes are updated and obstacles are good to update
+            // if (shouldUpdateObstacles) {
+                // var i, len;
+                // for (i = 0, len = obstacles.length; i < len; i++)
+                // {
+                    // obstacles[i].update();
+                // }
+                // shouldUpdateObstacles = false;
+            // }
+
+            //change water height based on flood levels
+            dV = options.waterSimFloodVolRate * dt;
+            hfWater.flood(dV);
+
+            requestAnimationFrame(loop);
+        }
+        loop();
+    });
+    </script>
+</head>
+<body>
+    <div id="threejs-container"></div>
+    <div class="translucent" id="info-container">
+        <div>Camera: [ Alt+LMB: rotate ] [ Alt+MMB: pan ] [ Alt+RMB: zoom ]</div>
+        <div>Water: [ Spc+LMB: disturb ] [ Spc+RMB: source ] [ Spc+MMB: sink ]</div>
+    </div>
+</body>
+</html>
