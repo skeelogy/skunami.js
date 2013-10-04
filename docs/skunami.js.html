@@ -1,6 +1,33 @@
-/**
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: skunami.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: skunami.js</h1>
+
+    
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source"><code>/**
  * @fileOverview GPU height field water simulations for Three.js flat planes
- * @author Skeel Lee <skeel@skeelogy.com>
+ * @author Skeel Lee &lt;skeel@skeelogy.com>
  * @version 1.0.1
  *
  * @example
@@ -328,7 +355,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__shaders = {
 
                 "#if MAX_DIR_LIGHTS > 0",
 
-                    "for (int i = 0; i < MAX_DIR_LIGHTS; i++) {",
+                    "for (int i = 0; i &lt; MAX_DIR_LIGHTS; i++) {",
                         "vec4 lightVector = viewMatrix * vec4(directionalLightDirection[i], 0.0);",
                         "float normalModulator = dot(normalize(vViewNormal), normalize(lightVector.xyz));",
                         "diffuse += normalModulator * directionalLightColor[i];",
@@ -384,7 +411,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__shaders = {
                 "} else {",
                     //if not using obstacle texture, it means we can just determine this info from the water height.
                     //no water means it is in obstacle.
-                    "inObstacle = float(t.r < 0.0);",
+                    "inObstacle = float(t.r &lt; 0.0);",
                 "}",
 
                 //add disturb (will be masked by obstacles)
@@ -609,9 +636,9 @@ SKUNAMI.GpuHeightFieldWater.prototype.__shaders = {
                 "tWater.b = 0.0;",
                 "float fk, fl;",
                 "vec4 tWaterNeighbour;",
-                "for (int k = -KERNEL_RADIUS; k <= KERNEL_RADIUS; k++) {",
+                "for (int k = -KERNEL_RADIUS; k &lt;= KERNEL_RADIUS; k++) {",
                     "fk = float(k);",
-                    "for (int l = -KERNEL_RADIUS; l <= KERNEL_RADIUS; l++) {",
+                    "for (int l = -KERNEL_RADIUS; l &lt;= KERNEL_RADIUS; l++) {",
                         "fl = float(l);",
                         "tWaterNeighbour = texture2D(uWaterTexture, vec2(vUv.r + fk * uTexelSize.r, vUv.g + fl * uTexelSize.g));",
                         "tWater.b += uKernel[(k + KERNEL_RADIUS) * KERNEL_WIDTH + (l + KERNEL_RADIUS)] * (tWaterNeighbour.r - tWaterNeighbour.a);",
@@ -922,14 +949,14 @@ SKUNAMI.GpuHeightFieldWater.prototype.__shaders = {
                 "float topHeight = (uHalfRange - waterHeight - tTop.r) * tTop.a;",
 
                 //compare the top and bottom depths to determine if water is in obstacle
-                "bool inObstacle = bottomHeight < 0.0 && topHeight > 0.0;",
+                "bool inObstacle = bottomHeight &lt; 0.0 && topHeight > 0.0;",
 
                 //also calculate amount of water displaced
                 "float displacedHeight;",
                 "if (bottomHeight > 0.0) {",
                     //totally above water, so there is no water displaced
                     "displacedHeight = 0.0;",
-                "} else if (topHeight < 0.0) {",
+                "} else if (topHeight &lt; 0.0) {",
                     //totally below water, so water displaced height is top minus bottom
                     "displacedHeight = topHeight - bottomHeight;",
                 "} else {",
@@ -1486,13 +1513,13 @@ SKUNAMI.GpuHeightFieldWater.prototype.__initDataAndTextures = function () {
     var i, j, len, idx;
 
     //init everything to 1 first
-    for (i = 0, len = this.__boundaryData.length; i < len; i++) {
+    for (i = 0, len = this.__boundaryData.length; i &lt; len; i++) {
         this.__boundaryData[i] = 1.0;
     }
 
     //init all boundary values to 0
     j = 0;
-    for (i = 0; i < this.__res; i++) {
+    for (i = 0; i &lt; this.__res; i++) {
         idx = 4 * (i + this.__res * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
@@ -1500,7 +1527,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__initDataAndTextures = function () {
         this.__boundaryData[idx + 3] = 0.0;
     }
     j = this.__res - 1;
-    for (i = 0; i < this.__res; i++) {
+    for (i = 0; i &lt; this.__res; i++) {
         idx = 4 * (i + this.__res * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
@@ -1508,7 +1535,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__initDataAndTextures = function () {
         this.__boundaryData[idx + 3] = 0.0;
     }
     i = 0;
-    for (j = 0; j < this.__res; j++) {
+    for (j = 0; j &lt; this.__res; j++) {
         idx = 4 * (i + this.__res * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
@@ -1516,7 +1543,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__initDataAndTextures = function () {
         this.__boundaryData[idx + 3] = 0.0;
     }
     i = this.__res - 1;
-    for (j = 0; j < this.__res; j++) {
+    for (j = 0; j &lt; this.__res; j++) {
         idx = 4 * (i + this.__res * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
@@ -1644,7 +1671,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__calculateSubsteps = function (dt) {
     return 1;
 };
 /**
- * Updates the water simulation<br/><strong>NOTE:  This needs to be called every frame, after renderer.clear() and before renderer.render(...)</strong>
+ * Updates the water simulation&lt;br/>&lt;strong>NOTE:  This needs to be called every frame, after renderer.clear() and before renderer.render(...)&lt;/strong>
  * @param  {number} dt Elapsed time since previous frame
  */
 SKUNAMI.GpuHeightFieldWater.prototype.update = function (dt) {
@@ -1673,7 +1700,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.update = function (dt) {
 
     //do multiple full steps per frame to speed up some of algorithms that are slow to propagate at high mesh resolutions
     var i;
-    for (i = 0; i < this.__multisteps; i++) {
+    for (i = 0; i &lt; this.__multisteps; i++) {
         this.__step(dt);
     }
 
@@ -1694,7 +1721,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__step = function (dt) {
 
     //water sim
     var i;
-    for (i = 0; i < substeps; i++) {
+    for (i = 0; i &lt; substeps; i++) {
         this.__waterSimPass(substepDt);
     }
 };
@@ -1756,7 +1783,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.removeObstacle = function (mesh) {
 
     //remove from dynamic obstacle array if it exists
     var i, len;
-    for (i = 0, len = this.__dynObstacles.length; i < len; i++) {
+    for (i = 0, len = this.__dynObstacles.length; i &lt; len; i++) {
         if (this.__dynObstacles[i] === mesh) {
             this.__dynObstacles.splice(i, 1);
         }
@@ -1764,7 +1791,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.removeObstacle = function (mesh) {
 
     //remove from static obstacle array if it exists
     var isStaticObstacle = false;
-    for (i = 0, len = this.__staticObstacles.length; i < len; i++) {
+    for (i = 0, len = this.__staticObstacles.length; i &lt; len; i++) {
         if (this.__staticObstacles[i] === mesh) {
             this.__staticObstacles.splice(i, 1);
             isStaticObstacle = true;
@@ -1797,7 +1824,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__updateStaticObstacleTexture = function (
 
     //show all static obstacles
     var i, len;
-    for (i = 0, len = this.__staticObstacles.length; i < len; i++) {
+    for (i = 0, len = this.__staticObstacles.length; i &lt; len; i++) {
         this.__staticObstacles[i].visible = true;
     }
 
@@ -1931,7 +1958,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__updateDynObstacleTexture = function (dt)
             if (that.__callbacks.hasOwnProperty('exertForce')) {
                 var renderCallbacks = that.__callbacks['exertForce'];
                 var i, len;
-                for (i = 0, len = renderCallbacks.length; i < len; i++) {
+                for (i = 0, len = renderCallbacks.length; i &lt; len; i++) {
                     renderCallbacks[i](object, new THREE.Vector3(object.__skhfwater.forceX, object.__skhfwater.forceY, object.__skhfwater.forceZ));
                 }
             }
@@ -2004,7 +2031,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__getPixelEncodedByteData = function (rend
     this.__getPixelByteDataForRenderTarget(this.__rttFloatEncoderRenderTarget, pixelByteData, width, height);
 };
 /**
- * Returns the pixel float data for the water textures<br/><strong>NOTE: This is an expensive operation.</strong>
+ * Returns the pixel float data for the water textures&lt;br/>&lt;strong>NOTE: This is an expensive operation.&lt;/strong>
  * @return {Float32Array} Float data of the water texture
  */
 SKUNAMI.GpuHeightFieldWater.prototype.getPixelFloatData = function () {
@@ -2777,4 +2804,26 @@ SKUNAMI.GpuPipeModelWater.prototype.__swapFluxRenderTargets = function () {
     this.__rttRenderTargetFlux1 = this.__rttRenderTargetFlux2;
     this.__rttRenderTargetFlux2 = temp;
     // this.__rttQuadMesh.material.uniforms['uTexture'].value = this.__rttRenderTargetFlux2;
-};
+};</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Index</a></h2><h3>Classes</h3><ul><li><a href="SKUNAMI.GpuHeightFieldSurfaceWater.html">GpuHeightFieldSurfaceWater</a></li><li><a href="SKUNAMI.GpuHeightFieldWater.html">GpuHeightFieldWater</a></li><li><a href="SKUNAMI.GpuMuellerGdc2008HwWater.html">GpuMuellerGdc2008HwWater</a></li><li><a href="SKUNAMI.GpuMuellerGdc2008Water.html">GpuMuellerGdc2008Water</a></li><li><a href="SKUNAMI.GpuPipeModelWater.html">GpuPipeModelWater</a></li><li><a href="SKUNAMI.GpuTessendorfIWaveWater.html">GpuTessendorfIWaveWater</a></li><li><a href="SKUNAMI.GpuXWater.html">GpuXWater</a></li></ul><h3>Namespaces</h3><ul><li><a href="SKUNAMI.html">SKUNAMI</a></li></ul>
+</nav>
+
+<br clear="both">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.2.0-dev</a> on Fri, 04 Oct 2013 11:46:26 GMT
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
