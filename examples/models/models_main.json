@@ -1,0 +1,35 @@
+{
+    "mainMarkerId": "64",
+    "models": {
+        "64": {
+            "name": "Origin",
+            "type": "empty"
+        },
+        "1001": {
+            "name": "crate",
+            "url": "models/crate/Crate1.obj",
+            "type": "obj",
+            "translate": [0, 0.3, 0],
+            "rotate": [0, 0, 0],
+            "rotationOrder": "XYZ",
+            "scale": [0.3, 0.3, 0.3],
+            "mass": 80,
+            "friction": 0.4,
+            "restitution": 0.2,
+            "linearDamping": 0.5,
+            "angularDamping": 0.25
+        },
+        "1002": {
+            "name": "stone_wall_04",
+            "url": "models/stone_wall_04/stone_wall_04.obj",
+            "type": "obj",
+            "translate": [0, 0, 0],
+            "rotate": [0, 0, 0],
+            "rotationOrder": "XYZ",
+            "scale": [0.3, 0.8, 0.3],
+            "mass": 0,
+            "friction": 0.4,
+            "restitution": 0.2
+        }
+    }
+}
