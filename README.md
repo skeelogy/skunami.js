@@ -3,14 +3,14 @@ skunami.js
 
 ### Introduction
 
-This is a collection of JavaScript/GLSL height field water libraries for Three.js plane meshes.
+This is a collection of JavaScript / GLSL height field water libraries for Three.js plane meshes.
 
 ### Available Height Field Water Types
 
 * **Pipe Model** _("Fast Hydraulic Erosion Simulation and Visualization on GPU", Xing Mei, Philippe Decaudin and Bao-Gang Hu, Pacific Graphics 2007)_
 * **X Water** _(["2D Water", Hugo Elias](http://freespace.virgin.net/hugo.elias/graphics/x_water.htm))_
-* **Muller GDC 2008** _("Fast Water Simulation for Games Using Height Fields", Matthias Mueller-Fisher, Game Developers Conference 2008)_
-* **Muller GDC 2008 Hello World** _("Fast Water Simulation for Games Using Height Fields", Matthias Mueller-Fisher, Game Developers Conference 2008)_
+* **Mueller GDC 2008** _("Fast Water Simulation for Games Using Height Fields", Matthias Mueller-Fisher, Game Developers Conference 2008)_
+* **Mueller GDC 2008 Hello World** _("Fast Water Simulation for Games Using Height Fields", Matthias Mueller-Fisher, Game Developers Conference 2008)_
 * **Tessendorf iWave** _("Interactive Water Surfaces", Jerry Tessendorf, Game Programming Gems 4)_
 
 ### Features
@@ -46,9 +46,9 @@ This is a collection of JavaScript/GLSL height field water libraries for Three.j
 
 ### Documentation
 
-* [1.0](http://skeelogy.github.io/skunami.js/docs/1.0)
+* [1.0.x](http://skeelogy.github.io/skunami.js/docs/1.0.x)
 
 ### License
 
 Released under The MIT License (MIT)<br/>
-Copyright (c) 2013 Skeel Lee ([http://cg.skeelogy.com](http://cg.skeelogy.com)) @skeelogy
+Copyright (c) 2013 Skeel Lee ([http://cg.skeelogy.com](http://cg.skeelogy.com))
