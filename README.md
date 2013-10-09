@@ -1,7 +1,7 @@
 skunami-cpu.js
 ==============
 
-## NOTE: This is the CPU version which is quite slow and is not actively maintained / supported. Please use the GPU from the master branch if you need an interactive height field water library.
+## NOTE: This is an experimental CPU version which is quite slow and is not actively maintained / supported. Please use the GPU version from the master branch if you need an interactive height field water library.
 
 ### Introduction
 
