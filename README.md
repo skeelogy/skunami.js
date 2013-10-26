@@ -48,6 +48,10 @@ This is a collection of JavaScript / GLSL height field water libraries for Three
 
 * [1.0.x](http://skeelogy.github.io/skunami.js/docs/1.0.x)
 
+### Browser Support
+
+Tested only in Google Chrome (recommended) and Mozilla FireFox
+
 ### License
 
 Released under The MIT License (MIT)<br/>
