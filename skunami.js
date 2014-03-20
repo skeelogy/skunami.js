@@ -1,7 +1,7 @@
 /**
  * @fileOverview GPU height field water simulations for Three.js flat planes
  * @author Skeel Lee <skeel@skeelogy.com>
- * @version 1.0.2
+ * @version 1.0.3
  *
  * @example
  * //How to setup a water sim:
@@ -62,7 +62,7 @@
 /**
  * @namespace
  */
-var SKUNAMI = SKUNAMI || { version: '1.0.2' };
+var SKUNAMI = SKUNAMI || { version: '1.0.3' };
 console.log('Using SKUNAMI ' + SKUNAMI.version);
 
 /**
@@ -83,7 +83,11 @@ SKUNAMI.GpuHeightFieldWater = function (options) {
     if (typeof options.size === 'undefined') {
         throw new Error('size not specified');
     }
-    this.__size = options.size;
+    if (typeof options.size === 'number') {
+        this.__size = [options.size, options.size];
+    } else {
+        this.__size = options.size;
+    }
     if (typeof options.scene === 'undefined') {
         throw new Error('scene not specified');
     }
@@ -91,7 +95,11 @@ SKUNAMI.GpuHeightFieldWater = function (options) {
     if (typeof options.res === 'undefined') {
         throw new Error('res not specified');
     }
-    this.__res = options.res;
+    if (typeof options.res === 'number') {
+        this.__res = [options.res, options.res];
+    } else {
+        this.__res = options.res;
+    }
     if (typeof options.dampingFactor === 'undefined') {
         throw new Error('dampingFactor not specified');
     }
@@ -107,16 +115,19 @@ SKUNAMI.GpuHeightFieldWater = function (options) {
     this.__gravity = 9.81;
     this.__density = options.density || 1000;  //default to 1000 kg per cubic metres
 
-    this.__halfSize = this.__size / 2.0;
-    this.__segmentSize = this.__size / this.__res;
-    this.__segmentSizeSquared = this.__segmentSize * this.__segmentSize;
-    this.__texelSize = 1.0 / this.__res;
+    this.__halfSizeX = this.__size[0] / 2.0;
+    this.__halfSizeY = this.__size[1] / 2.0;
+    this.__segmentSizeX = this.__size[0] / this.__res[0];
+    this.__segmentSizeY = this.__size[1] / this.__res[1];
+    this.__segmentSizeSquared = this.__segmentSizeX * this.__segmentSizeY;  // this is only required by the pipeModel and in updateDynObstacleTexture for dynamic objects
+    this.__texelSizeX = 1.0 / this.__res[0];
+    this.__texelSizeY = 1.0 / this.__res[1];
 
     this.__disturbMapHasUpdated = false;
     this.__isDisturbing = false;
     this.__disturbUvPos = new THREE.Vector2();
     this.__disturbAmount = 0;
-    this.__disturbRadius = 0.0025 * this.__size;
+    this.__disturbRadius = 0.0025 * this.__size[0];
 
     this.__linearFloatRgbaParams = {
         minFilter: THREE.LinearFilter,
@@ -141,12 +152,12 @@ SKUNAMI.GpuHeightFieldWater = function (options) {
     };
 
     //create a boundary texture
-    this.__boundaryData = new Float32Array(4 * this.__res * this.__res);
+    this.__boundaryData = new Float32Array(4 * this.__res[0] * this.__res[1]);
 
     //camera depth range (for obstacles)
     this.__rttObstaclesCameraRange = 50.0;
 
-    this.__pixelByteData = new Uint8Array(this.__res * this.__res * 4);
+    this.__pixelByteData = new Uint8Array(this.__res[0] * this.__res[1] * 4);
 
     this.__staticObstacles = [];
     this.__dynObstacles = [];
@@ -204,9 +215,9 @@ SKUNAMI.GpuHeightFieldWater.prototype.__init = function () {
 
     //create an empty texture because the default value of textures does not seem to be 0?
     if (this.__supportsTextureFloatLinear) {
-        this.__emptyTexture = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__linearFloatRgbaParams);
+        this.__emptyTexture = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__linearFloatRgbaParams);
     } else {
-        this.__emptyTexture = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__nearestFloatRgbaParams);
+        this.__emptyTexture = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__nearestFloatRgbaParams);
     }
     this.__emptyTexture.generateMipmaps = false;
     this.__clearRenderTarget(this.__emptyTexture, 0.0, 0.0, 0.0, 0.0);
@@ -214,11 +225,11 @@ SKUNAMI.GpuHeightFieldWater.prototype.__init = function () {
     //create a DataTexture for the boundary, with filtering type based on whether linear filtering is available
     if (this.__supportsTextureFloatLinear) {
         //use linear with mipmapping
-        this.__boundaryTexture = new THREE.DataTexture(null, this.__res, this.__res, THREE.RGBAFormat, THREE.FloatType);
+        this.__boundaryTexture = new THREE.DataTexture(null, this.__res[0], this.__res[1], THREE.RGBAFormat, THREE.FloatType);
         this.__boundaryTexture.generateMipmaps = true;
     } else {
         //resort to nearest filter only, without mipmapping
-        this.__boundaryTexture = new THREE.DataTexture(null, this.__res, this.__res, THREE.RGBAFormat, THREE.FloatType, undefined, THREE.ClampToEdgeWrapping, THREE.ClampToEdgeWrapping, THREE.NearestFilter, THREE.NearestFilter);
+        this.__boundaryTexture = new THREE.DataTexture(null, this.__res[0], this.__res[1], THREE.RGBAFormat, THREE.FloatType, undefined, THREE.ClampToEdgeWrapping, THREE.ClampToEdgeWrapping, THREE.NearestFilter, THREE.NearestFilter);
         this.__boundaryTexture.generateMipmaps = false;
     }
     this.__initDataAndTextures();
@@ -228,7 +239,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__init = function () {
     this.__setupVtf();
 
     //init parallel reducer
-    this.__pr = new SKPR.ParallelReducer(this.__renderer, this.__res, 1);
+    this.__pr = new SKPR.ParallelReducer(this.__renderer, this.__res, 1); // TODO update ParallelReducer to use this.__res (now an Array)
 };
 SKUNAMI.GpuHeightFieldWater.prototype.__getWaterFragmentShaderContent = function () {
     throw new Error('Abstract method not implemented');
@@ -1279,8 +1290,8 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupShaders = function () {
     this.__waterSimMaterial = new THREE.ShaderMaterial({
         uniforms: {
             uTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSize, this.__texelSize) },
-            uTexelWorldSize: { type: 'v2', value: new THREE.Vector2(this.__size / this.__res, this.__size / this.__res) },
+            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSizeX, this.__texelSizeY) },
+            uTexelWorldSize: { type: 'v2', value: new THREE.Vector2(this.__size[0] / this.__res[0], this.__size[1] / this.__res[1]) },
             uDampingFactor: { type: 'f', value: this.__dampingFactor },
             uDt: { type: 'f', value: 0.0 },
             uMeanHeight: { type: 'f', value: this.__meanHeight }
@@ -1351,7 +1362,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupShaders = function () {
     this.__calcDisturbMapMaterial = new THREE.ShaderMaterial({
         uniforms: {
             uTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSize, this.__texelSize) }
+            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSizeX, this.__texelSizeY) }
         },
         vertexShader: this.__shaders.vert['passUv'],
         fragmentShader: this.__shaders.frag['hfWater_calcDisturbMap']
@@ -1360,7 +1371,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupShaders = function () {
     this.__gaussianBlurXMaterial = new THREE.ShaderMaterial({
         uniforms: {
             uTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'f', value: this.__texelSize }
+            uTexelSize: { type: 'f', value: this.__texelSizeX }
         },
         vertexShader: this.__shaders.vert['passUv'],
         fragmentShader: this.__shaders.frag['gaussianBlurX']
@@ -1369,7 +1380,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupShaders = function () {
     this.__gaussianBlurYMaterial = new THREE.ShaderMaterial({
         uniforms: {
             uTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'f', value: this.__texelSize }
+            uTexelSize: { type: 'f', value: this.__texelSizeY }
         },
         vertexShader: this.__shaders.vert['passUv'],
         fragmentShader: this.__shaders.frag['gaussianBlurY']
@@ -1387,7 +1398,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupShaders = function () {
     this.__erodeMaterial = new THREE.ShaderMaterial({
         uniforms: {
             uTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'f', value: this.__texelSize }
+            uTexelSize: { type: 'f', value: this.__texelSizeX }
         },
         vertexShader: this.__shaders.vert['passUv'],
         fragmentShader: this.__shaders.frag['erode']
@@ -1409,19 +1420,19 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupRttScene = function () {
     //create an orthographic RTT camera
     var far = 10000;
     var near = -far;
-    this.__rttCamera = new THREE.OrthographicCamera(-this.__halfSize, this.__halfSize, this.__halfSize, -this.__halfSize, near, far);
+    this.__rttCamera = new THREE.OrthographicCamera(-this.__halfSizeX, this.__halfSizeX, this.__halfSizeY, -this.__halfSizeY, near, far);
 
     //create a quad which we will use to invoke the shaders
-    this.__rttQuadGeom = new THREE.PlaneGeometry(this.__size, this.__size);
+    this.__rttQuadGeom = new THREE.PlaneGeometry(this.__size[0], this.__size[1]);
     this.__rttQuadMesh = new THREE.Mesh(this.__rttQuadGeom, this.__waterSimMaterial);
     this.__rttScene.add(this.__rttQuadMesh);
 };
 SKUNAMI.GpuHeightFieldWater.prototype.__setupRttRenderTargets = function () {
     //create RTT render targets (need two for feedback)
     if (this.__supportsTextureFloatLinear) {
-        this.__rttRenderTarget1 = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__linearFloatRgbaParams);
+        this.__rttRenderTarget1 = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__linearFloatRgbaParams);
     } else {
-        this.__rttRenderTarget1 = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__nearestFloatRgbaParams);
+        this.__rttRenderTarget1 = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__nearestFloatRgbaParams);
     }
     this.__rttRenderTarget1.generateMipmaps = false;
     this.__clearRenderTarget(this.__rttRenderTarget1, 0.0, 0.0, 0.0, 0.0);  //clear render target (necessary for FireFox)
@@ -1435,7 +1446,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupRttRenderTargets = function () {
     this.__clearRenderTarget(this.__rttObstaclesDisplay, 0.0, 0.0, 0.0, 1.0);  //clear render target (necessary for FireFox)
 
     //create another RTT render target encoding float to 4-byte data
-    this.__rttFloatEncoderRenderTarget = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__nearestFloatRgbaParams);
+    this.__rttFloatEncoderRenderTarget = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__nearestFloatRgbaParams);
     this.__rttFloatEncoderRenderTarget.generateMipmaps = false;
     this.__clearRenderTarget(this.__rttFloatEncoderRenderTarget, 0.0, 0.0, 0.0, 0.0);  //clear render target (necessary for FireFox)
 
@@ -1462,8 +1473,8 @@ SKUNAMI.GpuHeightFieldWater.prototype.__setupVtf = function () {
             THREE.UniformsLib['shadowmap'],
             {
                 uTexture: { type: 't', value: this.__rttRenderTarget1 },
-                uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSize, this.__texelSize) },
-                uTexelWorldSize: { type: 'v2', value: new THREE.Vector2(this.__segmentSize, this.__segmentSize) },
+                uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSizeX, this.__texelSizeY) },
+                uTexelWorldSize: { type: 'v2', value: new THREE.Vector2(this.__segmentSizeX, this.__segmentSizeY) },
                 uHeightMultiplier: { type: 'f', value: 1.0 },
                 uBaseColor: { type: 'v3', value: new THREE.Vector3(0.45, 0.95, 1.0) }
             }
@@ -1508,33 +1519,33 @@ SKUNAMI.GpuHeightFieldWater.prototype.__initDataAndTextures = function () {
     }
 
     //init all boundary values to 0
-    j = 0;
-    for (i = 0; i < this.__res; i++) {
-        idx = 4 * (i + this.__res * j);
+    j = 0; // left line
+    for (i = 0; i < this.__res[1]; i++) {
+        idx = 4 * (i + this.__res[1] * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
         this.__boundaryData[idx + 2] = 0.0;
         this.__boundaryData[idx + 3] = 0.0;
     }
-    j = this.__res - 1;
-    for (i = 0; i < this.__res; i++) {
-        idx = 4 * (i + this.__res * j);
+    j = this.__res[0] - 1; // right line
+    for (i = 0; i < this.__res[1]; i++) {
+        idx = 4 * (i + this.__res[1] * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
         this.__boundaryData[idx + 2] = 0.0;
         this.__boundaryData[idx + 3] = 0.0;
     }
-    i = 0;
-    for (j = 0; j < this.__res; j++) {
-        idx = 4 * (i + this.__res * j);
+    i = 0; // top line
+    for (j = 0; j < this.__res[0]; j++) {
+        idx = 4 * (i + this.__res[0] * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
         this.__boundaryData[idx + 2] = 0.0;
         this.__boundaryData[idx + 3] = 0.0;
     }
-    i = this.__res - 1;
-    for (j = 0; j < this.__res; j++) {
-        idx = 4 * (i + this.__res * j);
+    i = this.__res[1] - 1; // bottom line
+    for (j = 0; j < this.__res[0]; j++) {
+        idx = 4 * (i + this.__res[0] * j);
         this.__boundaryData[idx] = 0.0;
         this.__boundaryData[idx + 1] = 0.0;
         this.__boundaryData[idx + 2] = 0.0;
@@ -1548,10 +1559,10 @@ SKUNAMI.GpuHeightFieldWater.prototype.__initDataAndTextures = function () {
 SKUNAMI.GpuHeightFieldWater.prototype.__setupObstaclesScene = function () {
 
     //create top and bottom cameras
-    this.__rttObstaclesTopCamera = new THREE.OrthographicCamera(-this.__halfSize, this.__halfSize, -this.__halfSize, this.__halfSize, 0, this.__rttObstaclesCameraRange);
+    this.__rttObstaclesTopCamera = new THREE.OrthographicCamera(-this.__halfSizeX, this.__halfSizeX, -this.__halfSizeY, this.__halfSizeY, 0, this.__rttObstaclesCameraRange);
     this.__rttObstaclesTopCamera.position.y = -this.__rttObstaclesCameraRange / 2;
     this.__rttObstaclesTopCamera.rotation.x = THREE.Math.degToRad(90);
-    this.__rttObstaclesBottomCamera = new THREE.OrthographicCamera(-this.__halfSize, this.__halfSize, -this.__halfSize, this.__halfSize, 0, this.__rttObstaclesCameraRange);
+    this.__rttObstaclesBottomCamera = new THREE.OrthographicCamera(-this.__halfSizeX, this.__halfSizeX, -this.__halfSizeY, this.__halfSizeY, 0, this.__rttObstaclesCameraRange);
     this.__rttObstaclesBottomCamera.position.y = this.__rttObstaclesCameraRange / 2;
     this.__rttObstaclesBottomCamera.rotation.x = THREE.Math.degToRad(-90);
 
@@ -1603,8 +1614,8 @@ SKUNAMI.GpuHeightFieldWater.prototype.__resetPass = function () {
  */
 SKUNAMI.GpuHeightFieldWater.prototype.disturb = function (position, amount, radius) {
     this.__isDisturbing = true;
-    this.__disturbUvPos.x = (position.x + this.__halfSize) / this.__size;
-    this.__disturbUvPos.y = (position.z + this.__halfSize) / this.__size;
+    this.__disturbUvPos.x = (position.x + this.__halfSizeX) / this.__size[0];
+    this.__disturbUvPos.y = (position.z + this.__halfSizeY) / this.__size[1];
     this.__disturbAmount = amount;
     this.__disturbRadius = radius;
 };
@@ -1628,7 +1639,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__disturbPass = function () {
         this.__disturbAndSourceMaterial.uniforms['uIsDisturbing'].value = this.__isDisturbing;
         this.__disturbAndSourceMaterial.uniforms['uDisturbPos'].value.copy(this.__disturbUvPos);
         this.__disturbAndSourceMaterial.uniforms['uDisturbAmount'].value = this.__disturbAmount;
-        this.__disturbAndSourceMaterial.uniforms['uDisturbRadius'].value = this.__disturbRadius / this.__size;
+        this.__disturbAndSourceMaterial.uniforms['uDisturbRadius'].value = this.__disturbRadius / this.__size[0];
         shouldRender = true;
     }
     if (shouldRender) {
@@ -1869,11 +1880,11 @@ SKUNAMI.GpuHeightFieldWater.prototype.__updateDynObstacleTexture = function (dt)
     this.__renderer.render(this.__rttScene, this.__rttCamera, this.__rttCombinedHeightsBlurredRenderTarget, false);
     this.__rttQuadMesh.material = this.__gaussianBlurXMaterial;
     this.__gaussianBlurXMaterial.uniforms['uTexture'].value = this.__rttCombinedHeightsBlurredRenderTarget;
-    this.__gaussianBlurXMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res;
+    this.__gaussianBlurXMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res[0];
     this.__renderer.render(this.__rttScene, this.__rttCamera, this.__rttCombinedHeightsBlurredRenderTarget, false);
     this.__rttQuadMesh.material = this.__gaussianBlurYMaterial;
     this.__gaussianBlurYMaterial.uniforms['uTexture'].value = this.__rttCombinedHeightsBlurredRenderTarget;
-    this.__gaussianBlurYMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res;
+    this.__gaussianBlurYMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res[1];
     this.__renderer.render(this.__rttScene, this.__rttCamera, this.__rttCombinedHeightsBlurredRenderTarget, false);
 
     var that = this;
@@ -1981,11 +1992,11 @@ SKUNAMI.GpuHeightFieldWater.prototype.__updateDynObstacleTexture = function (dt)
     //blur the obstacles map
     this.__rttQuadMesh.material = this.__gaussianBlurXMaterial;
     this.__gaussianBlurXMaterial.uniforms['uTexture'].value = this.__rttDynObstaclesRenderTarget;
-    this.__gaussianBlurXMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res;
+    this.__gaussianBlurXMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res[0];
     this.__renderer.render(this.__rttScene, this.__rttCamera, this.__rttDynObstaclesBlurredRenderTarget, false);  //need to render to another target to avoid corrupting original accumulated
     this.__rttQuadMesh.material = this.__gaussianBlurYMaterial;
     this.__gaussianBlurYMaterial.uniforms['uTexture'].value = this.__rttDynObstaclesBlurredRenderTarget;
-    this.__gaussianBlurYMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res;
+    this.__gaussianBlurYMaterial.uniforms['uTexelSize'].value = 1.0 / this.__res[1];
     this.__renderer.render(this.__rttScene, this.__rttCamera, this.__rttDynObstaclesBlurredRenderTarget, false);
 
     //calculate a map with additional heights to disturb water, based on differences in water volumes between frames
@@ -2033,7 +2044,7 @@ SKUNAMI.GpuHeightFieldWater.prototype.__getPixelEncodedByteData = function (rend
 SKUNAMI.GpuHeightFieldWater.prototype.getPixelFloatData = function () {
 
     //get the encoded byte data first
-    this.__getPixelEncodedByteData(this.__rttRenderTarget1, this.__pixelByteData, 'r', this.__res, this.__res);
+    this.__getPixelEncodedByteData(this.__rttRenderTarget1, this.__pixelByteData, 'r', this.__res[0], this.__res[1]);
 
     //cast to float
     var pixelFloatData = new Float32Array(this.__pixelByteData.buffer);
@@ -2092,7 +2103,7 @@ SKUNAMI.GpuHeightFieldSurfaceWater.prototype.constructor = SKUNAMI.GpuHeightFiel
  * @param  {number} volume Volume of water to flood the scene with, in cubic scene units
  */
 SKUNAMI.GpuHeightFieldSurfaceWater.prototype.flood = function (volume) {
-    this.__meanHeight += volume / (this.__size * this.__size);
+    this.__meanHeight += volume / (this.__size[0] * this.__size[1]);
 };
 //methods
 /**
@@ -2135,7 +2146,7 @@ SKUNAMI.GpuMuellerGdc2008Water = function (options) {
 
     SKUNAMI.GpuHeightFieldSurfaceWater.call(this, options);
 
-    this.__maxDt = this.__segmentSize / this.__horizontalSpeed;  //based on CFL condition
+    this.__maxDt = this.__segmentSizeX / this.__horizontalSpeed;  //based on CFL condition
 };
 //inherit
 SKUNAMI.GpuMuellerGdc2008Water.prototype = Object.create(SKUNAMI.GpuHeightFieldSurfaceWater.prototype);
@@ -2246,7 +2257,7 @@ SKUNAMI.GpuTessendorfIWaveWater.prototype.__setupShaders = function () {
     this.__convolveMaterial = new THREE.ShaderMaterial({
         uniforms: {
             uWaterTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSize, this.__texelSize) },
+            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSizeX, this.__texelSizeY) },
             uKernel: { type: "fv1", value: this.__kernelData }
         },
         vertexShader: this.__shaders.vert['passUv'],
@@ -2593,17 +2604,17 @@ SKUNAMI.GpuPipeModelWater = function (options) {
     this.__isSourcing = false;
     this.__sourceUvPos = new THREE.Vector2();
     this.__sourceAmount = 0;
-    this.__sourceRadius = 0.0025 * this.__size;
+    this.__sourceRadius = 0.0025 * this.__size[0];
 
     //some constants
     this.__atmosPressure = 0;  //assume one constant atmos pressure throughout
-    this.__pipeLength = this.__segmentSize;
+    this.__pipeLength = this.__segmentSizeX;
     this.__pipeCrossSectionArea = this.__pipeLength * this.__pipeLength;  //square cross-section area
-    this.__pipeCrossSectionArea *= this.__res / 10;  //scale according to resolution
+    this.__pipeCrossSectionArea *= this.__res[0] / 10;  //scale according to resolution
     this.__heightToFluxFactorNoDt = this.__pipeCrossSectionArea * this.__gravity / this.__pipeLength;
 
     this.__maxHorizontalSpeed = 10.0;  //just an arbitrary upper-bound estimate //TODO: link this to cross-section area
-    this.__maxDt = this.__segmentSize / this.__maxHorizontalSpeed;  //based on CFL condition
+    this.__maxDt = this.__segmentSizeX / this.__maxHorizontalSpeed;  //based on CFL condition
 
 };
 //inherit
@@ -2624,7 +2635,7 @@ SKUNAMI.GpuPipeModelWater.prototype.__setupShaders = function () {
             uFluxTexture: { type: 't', value: this.__emptyTexture },
             uStaticObstaclesTexture: { type: 't', value: this.__emptyTexture },
             uBoundaryTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSize, this.__texelSize) },
+            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSizeX, this.__texelSizeY) },
             uDampingFactor: { type: 'f', value: this.__dampingFactor },
             uHeightToFluxFactor: { type: 'f', value: 0.0 },
             uSegmentSizeSquared: { type: 'f', value: this.__segmentSizeSquared },
@@ -2639,8 +2650,8 @@ SKUNAMI.GpuPipeModelWater.prototype.__setupShaders = function () {
         uniforms: {
             uWaterTexture: { type: 't', value: this.__emptyTexture },
             uFluxTexture: { type: 't', value: this.__emptyTexture },
-            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSize, this.__texelSize) },
-            uSegmentSize: { type: 'f', value: this.__segmentSize },
+            uTexelSize: { type: 'v2', value: new THREE.Vector2(this.__texelSizeX, this.__texelSizeY) },
+            uSegmentSize: { type: 'f', value: this.__segmentSizeX },
             uDt: { type: 'f', value: 0.0 },
             uMinWaterHeight: { type: 'f', value: this.__minWaterHeight }
         },
@@ -2671,9 +2682,9 @@ SKUNAMI.GpuPipeModelWater.prototype.__setupRttRenderTargets = function () {
 
     //create RTT render targets for flux (we need two to do feedback)
     if (this.__supportsTextureFloatLinear) {
-        this.__rttRenderTargetFlux1 = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__linearFloatRgbaParams);
+        this.__rttRenderTargetFlux1 = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__linearFloatRgbaParams);
     } else {
-        this.__rttRenderTargetFlux1 = new THREE.WebGLRenderTarget(this.__res, this.__res, this.__nearestFloatRgbaParams);
+        this.__rttRenderTargetFlux1 = new THREE.WebGLRenderTarget(this.__res[0], this.__res[1], this.__nearestFloatRgbaParams);
     }
     this.__rttRenderTargetFlux1.generateMipmaps = false;
     this.__clearRenderTarget(this.__rttRenderTargetFlux1, 0.0, 0.0, 0.0, 0.0);  //clear render target (necessary for FireFox)
@@ -2694,8 +2705,8 @@ SKUNAMI.GpuPipeModelWater.prototype.__setupRttRenderTargets = function () {
  */
 SKUNAMI.GpuPipeModelWater.prototype.source = function (position, amount, radius) {
     this.__isSourcing = true;
-    this.__sourceUvPos.x = (position.x + this.__halfSize) / this.__size;
-    this.__sourceUvPos.y = (position.z + this.__halfSize) / this.__size;
+    this.__sourceUvPos.x = (position.x + this.__halfSizeX) / this.__size[0];
+    this.__sourceUvPos.y = (position.z + this.__halfSizeY) / this.__size[1];
     this.__sourceAmount = amount;
     this.__sourceRadius = radius;
 };
@@ -2705,7 +2716,7 @@ SKUNAMI.GpuPipeModelWater.prototype.source = function (position, amount, radius)
  */
 SKUNAMI.GpuPipeModelWater.prototype.flood = function (volume) {
     this.__isFlooding = true;
-    this.__floodAmount = volume / (this.__size * this.__size);
+    this.__floodAmount = volume / (this.__size[0] * this.__size[1]);
 };
 SKUNAMI.GpuPipeModelWater.prototype.__disturbPass = function () {
     var shouldRender = false;
@@ -2718,14 +2729,14 @@ SKUNAMI.GpuPipeModelWater.prototype.__disturbPass = function () {
         this.__disturbAndSourceMaterial.uniforms['uIsDisturbing'].value = this.__isDisturbing;
         this.__disturbAndSourceMaterial.uniforms['uDisturbPos'].value.copy(this.__disturbUvPos);
         this.__disturbAndSourceMaterial.uniforms['uDisturbAmount'].value = this.__disturbAmount;
-        this.__disturbAndSourceMaterial.uniforms['uDisturbRadius'].value = this.__disturbRadius / this.__size;
+        this.__disturbAndSourceMaterial.uniforms['uDisturbRadius'].value = this.__disturbRadius / this.__size[0];
         shouldRender = true;
     }
     if (this.__isSourcing && this.__sourceAmount !== 0.0) {
         this.__disturbAndSourceMaterial.uniforms['uIsSourcing'].value = this.__isSourcing;
         this.__disturbAndSourceMaterial.uniforms['uSourcePos'].value.copy(this.__sourceUvPos);
         this.__disturbAndSourceMaterial.uniforms['uSourceAmount'].value = this.__sourceAmount;
-        this.__disturbAndSourceMaterial.uniforms['uSourceRadius'].value = this.__sourceRadius / this.__size;
+        this.__disturbAndSourceMaterial.uniforms['uSourceRadius'].value = this.__sourceRadius / this.__size[0];
         shouldRender = true;
     }
     if (this.__isFlooding && this.__floodAmount !== 0.0) {
